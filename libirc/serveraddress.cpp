@@ -12,6 +12,10 @@
 
 #include "serveraddress.h"
 #include "irc_standards.h"
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QStringView>
+#endif
 
 using namespace libirc;
 
@@ -84,7 +88,11 @@ ServerAddress::ServerAddress(const QString &url)
         } else
         {
             this->_host = temp.mid(0, temp.indexOf(":"));
-            this->_port = temp.midRef(temp.indexOf(":") + 1).toUInt();
+            #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+            this->_port = temp.at(temp.indexOf(":") + 1).toUInt();
+            #else
+            this->_port = QStringView{temp}.mid(temp.indexOf(":")+1).toUInt();
+            #endif
         }
     }
     this->_valid = true;

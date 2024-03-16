@@ -13,6 +13,11 @@
 #include <QtNetwork>
 #include <QAbstractSocket>
 #include <QDebug>
+#include <QTextCodec>
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QStringView>
+#endif
 #include "network.h"
 #include "server.h"
 #include "channel.h"
@@ -23,6 +28,18 @@
 #include "../libirc/error_code.h"
 
 using namespace libircclient;
+
+namespace
+{
+    QDateTime FromTime_t(qint64 secs, Qt::TimeSpec spec = Qt::LocalTime, int offsetSeconds = 0)
+    {
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        return QDateTime::fromTime_t(secs,spec,offsetSeconds);
+#else
+        return QDateTime::fromSecsSinceEpoch(secs,spec,offsetSeconds);
+#endif
+    }
+}
 
 Network::Network(libirc::ServerAddress &server, const QString &name, const Encoding &enc) : libirc::Network(name)
 {
@@ -613,7 +630,7 @@ static QList<char> SortingHelper(QList<char> mask, QList<char> list)
     }
     // Now that we have all modes in a hash table, we can just easily sort them
     QList<int> unsorted_ints = hash.keys();
-    qSort(unsorted_ints);
+    std::sort(std::begin(unsorted_ints), std::end(unsorted_ints));
     QList<char> sorted_list;
     foreach (int mode, unsorted_ints)
         sorted_list.append(mask[mode]);
@@ -1278,7 +1295,11 @@ void Network::processWho(Parser *parser)
     gecos = parser->GetText();
     if (gecos.contains(" "))
     {
+        #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
         user->Hops = gecos.midRef(0, gecos.indexOf(" ")).toInt();
+        #else
+        user->Hops = QStringView{gecos}.mid(0, gecos.indexOf(" ")).toUInt();
+        #endif
         gecos = gecos.mid(gecos.indexOf(" ") + 1);
     }
     user->SetRealname(gecos);
@@ -1411,7 +1432,7 @@ void Network::processTopicWhoTime(Parser *parser)
         return;
     }
     channel->SetTopicUser(parameters[2]);
-    channel->SetTopicTime(QDateTime::fromTime_t(parameters[3].toUInt()));
+    channel->SetTopicTime(FromTime_t(parameters[3].toUInt()));
     emit this->Event_TOPICWhoTime(parser, channel);
 }
 
@@ -1436,7 +1457,7 @@ void Network::processPMode(Parser *parser, char mode)
     ChannelPMode temp(string);
     temp.SetBy = User(parameters[3]);
     temp.Parameter = parameters[2];
-    temp.SetOn = QDateTime::fromTime_t(parameters[4].toUInt());
+    temp.SetOn = FromTime_t(parameters[4].toUInt());
     if (channel->SetPMode(temp))
         emit this->Event_CPMInserted(parser, temp, channel);
     emit this->Event_PMode(parser, mode);
@@ -1581,7 +1602,7 @@ void Network::processMTime(Parser *parser)
         emit this->Event_Broken(parser, "Channel struct not in memory");
         return;
     }
-    channel->SetMTime(QDateTime::fromTime_t(parameters[2].toUInt()));
+    channel->SetMTime(FromTime_t(parameters[2].toUInt()));
     emit this->Event_CreationTime(parser);
 }
 
@@ -1776,7 +1797,7 @@ void Network::processWhoisIdle(Parser &parser)
     }
 
     idle_time = parameters[2].toUInt();
-    signon_time = QDateTime::fromTime_t(parameters[3].toUInt());
+    signon_time = FromTime_t(parameters[3].toUInt());
 
     emit this->Event_WhoisIdle(&parser, idle_time, signon_time);
 }
